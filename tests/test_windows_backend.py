@@ -1,9 +1,16 @@
+import sys
 import unittest
+from unittest.mock import patch
 
-from vitapad.backends.windows import _axis
+from vitapad.backends.windows import WindowsGamepad, _axis
 
 
 class WindowsAxisTests(unittest.TestCase):
+    def test_constructor_reports_missing_vgamepad(self) -> None:
+        with patch.dict(sys.modules, {"vgamepad": None}):
+            with self.assertRaisesRegex(RuntimeError, "需要 vgamepad"):
+                WindowsGamepad()
+
     def test_normal_axis_endpoints(self) -> None:
         self.assertEqual(_axis(0), -32768)
         self.assertEqual(_axis(128), 0)

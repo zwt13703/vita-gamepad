@@ -2,31 +2,6 @@ from __future__ import annotations
 
 from vitapad.protocol import Buttons, InputState
 
-try:
-    import vgamepad as vg
-except ImportError as exc:
-    raise RuntimeError(
-        'Windows 后端需要 vgamepad，请运行: pip install -e ".[windows]"'
-    ) from exc
-
-
-BUTTON_MAP = (
-    (Buttons.A, vg.XUSB_BUTTON.XUSB_GAMEPAD_A),
-    (Buttons.B, vg.XUSB_BUTTON.XUSB_GAMEPAD_B),
-    (Buttons.X, vg.XUSB_BUTTON.XUSB_GAMEPAD_X),
-    (Buttons.Y, vg.XUSB_BUTTON.XUSB_GAMEPAD_Y),
-    (Buttons.LB, vg.XUSB_BUTTON.XUSB_GAMEPAD_LEFT_SHOULDER),
-    (Buttons.RB, vg.XUSB_BUTTON.XUSB_GAMEPAD_RIGHT_SHOULDER),
-    (Buttons.BACK, vg.XUSB_BUTTON.XUSB_GAMEPAD_BACK),
-    (Buttons.START, vg.XUSB_BUTTON.XUSB_GAMEPAD_START),
-    (Buttons.L3, vg.XUSB_BUTTON.XUSB_GAMEPAD_LEFT_THUMB),
-    (Buttons.R3, vg.XUSB_BUTTON.XUSB_GAMEPAD_RIGHT_THUMB),
-    (Buttons.UP, vg.XUSB_BUTTON.XUSB_GAMEPAD_DPAD_UP),
-    (Buttons.DOWN, vg.XUSB_BUTTON.XUSB_GAMEPAD_DPAD_DOWN),
-    (Buttons.LEFT, vg.XUSB_BUTTON.XUSB_GAMEPAD_DPAD_LEFT),
-    (Buttons.RIGHT, vg.XUSB_BUTTON.XUSB_GAMEPAD_DPAD_RIGHT),
-)
-
 
 def _axis(value: int, *, invert: bool = False) -> int:
     if invert:
@@ -43,6 +18,28 @@ class WindowsGamepad:
 
     def __init__(self) -> None:
         try:
+            import vgamepad as vg
+        except ImportError as exc:
+            raise RuntimeError(
+                'Windows 后端需要 vgamepad，请运行: pip install -e ".[windows]"'
+            ) from exc
+        self._button_map = (
+            (Buttons.A, vg.XUSB_BUTTON.XUSB_GAMEPAD_A),
+            (Buttons.B, vg.XUSB_BUTTON.XUSB_GAMEPAD_B),
+            (Buttons.X, vg.XUSB_BUTTON.XUSB_GAMEPAD_X),
+            (Buttons.Y, vg.XUSB_BUTTON.XUSB_GAMEPAD_Y),
+            (Buttons.LB, vg.XUSB_BUTTON.XUSB_GAMEPAD_LEFT_SHOULDER),
+            (Buttons.RB, vg.XUSB_BUTTON.XUSB_GAMEPAD_RIGHT_SHOULDER),
+            (Buttons.BACK, vg.XUSB_BUTTON.XUSB_GAMEPAD_BACK),
+            (Buttons.START, vg.XUSB_BUTTON.XUSB_GAMEPAD_START),
+            (Buttons.L3, vg.XUSB_BUTTON.XUSB_GAMEPAD_LEFT_THUMB),
+            (Buttons.R3, vg.XUSB_BUTTON.XUSB_GAMEPAD_RIGHT_THUMB),
+            (Buttons.UP, vg.XUSB_BUTTON.XUSB_GAMEPAD_DPAD_UP),
+            (Buttons.DOWN, vg.XUSB_BUTTON.XUSB_GAMEPAD_DPAD_DOWN),
+            (Buttons.LEFT, vg.XUSB_BUTTON.XUSB_GAMEPAD_DPAD_LEFT),
+            (Buttons.RIGHT, vg.XUSB_BUTTON.XUSB_GAMEPAD_DPAD_RIGHT),
+        )
+        try:
             self._pad = vg.VX360Gamepad()
         except Exception as exc:
             raise RuntimeError(
@@ -51,7 +48,7 @@ class WindowsGamepad:
 
     def update(self, state: InputState) -> None:
         self._pad.reset()
-        for mask, button in BUTTON_MAP:
+        for mask, button in self._button_map:
             if state.buttons & mask:
                 self._pad.press_button(button=button)
         self._pad.left_joystick(
