@@ -52,18 +52,29 @@ def iter_usb_packets(
 ) -> Iterator[bytes]:
     connected_device: tuple[int | None, int | None] | None = None
     pending = bytearray()
+    waiting_since = time.monotonic()
+    reminder_logged = False
     while not stop.is_set():
         found = _find_vita()
         if found is None:
             if connected_device is not None:
                 log("PSVita USB 已断开；等待重新连接...")
                 connected_device = None
+                waiting_since = time.monotonic()
+                reminder_logged = False
+            if not reminder_logged and time.monotonic() - waiting_since >= 5:
+                log(
+                    "尚未检测到 PS Vita Type D。请确认 Vita 已切到 USB cable、"
+                    "使用数据线，并检查 Vita 屏幕是否显示 USB error。"
+                )
+                reminder_logged = True
             stop.wait(1.0)
             continue
         _device, endpoint, device_key = found
         if connected_device != device_key:
             connected_device = device_key
             pending.clear()
+            reminder_logged = False
             log("已检测到 PSVita USB 数据通道")
         try:
             chunk = bytes(endpoint.read(max(PACKET_SIZE, endpoint.wMaxPacketSize), 250))

@@ -15,6 +15,7 @@ from urllib.parse import parse_qs, urlparse
 import webbrowser
 
 from vitapad.backends import create_backend
+from vitapad.mapping import MappingManager
 from vitapad.protocol import InputState
 from vitapad.receiver import Receiver
 
@@ -36,6 +37,7 @@ class DashboardController:
         discovery_port: int,
         allow: str | None,
         timeout_ms: int,
+        config_path: str | None = None,
     ) -> None:
         self.backend_name = backend_name
         self._resolved_backend = backend_name
@@ -44,6 +46,7 @@ class DashboardController:
         self.discovery_port = discovery_port
         self.allow = allow
         self.timeout_ms = timeout_ms
+        self.mapping = MappingManager(config_path)
         self._lock = threading.RLock()
         self._status = "paused"
         self._receiver: Receiver | None = None
@@ -96,6 +99,7 @@ class DashboardController:
                 timeout_ms=self.timeout_ms,
                 log=self.log,
                 on_input=self.handle_input,
+                mapping=self.mapping,
             )
             with self._lock:
                 if self._stop_requested:
@@ -159,6 +163,13 @@ class DashboardController:
         with self._lock:
             return [asdict(entry) for entry in self._logs if entry.id > after]
 
+    def settings(self) -> dict[str, object]:
+        return self.mapping.describe()
+
+    def update_settings(self, payload: dict[str, object]) -> None:
+        self.mapping.update(payload)
+        self.log("按键映射和连击设置已保存。", "success")
+
     def handle_input(self, state: InputState) -> None:
         with self._lock:
             self._input = state
@@ -199,7 +210,8 @@ HTML = r"""<!doctype html>
 .actions{display:flex;gap:11px}.btn{border:0;border-radius:11px;padding:12px 19px;font-weight:650;font-size:14px;cursor:pointer;transition:.15s}.btn:hover{transform:translateY(-1px)}.btn:disabled{opacity:.42;cursor:not-allowed;transform:none}.start{background:var(--green);color:#07140e}.pause{background:#303c50;color:var(--text)}
 .logcard{grid-column:1/-1;padding:0;overflow:hidden}.loghead{display:flex;justify-content:space-between;align-items:center;padding:17px 20px;border-bottom:1px solid var(--line)}.loghead h2{font-size:15px;margin:0}.clear{color:var(--muted);background:none;border:0;cursor:pointer}.logs{height:310px;overflow:auto;padding:10px 0;font:13px ui-monospace,SFMono-Regular,Menlo,monospace}.entry{display:grid;grid-template-columns:72px 72px 1fr;gap:8px;padding:7px 20px}.entry:hover{background:#ffffff06}.time{color:#718198}.level{color:#91a2ba}.level.success{color:var(--green2)}.level.error{color:var(--red)}.message{white-space:pre-wrap;word-break:break-word}.hint{color:var(--muted);font-size:13px;line-height:1.65;margin:0}.errorbox{display:none;background:#3b1d27;border:1px solid #7b3345;color:#ffadb7;padding:11px 13px;border-radius:10px;margin-top:15px}
 .testcard{grid-column:1/-1;padding:18px 22px}.testhead{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:5px}.testhead h2{font-size:15px;margin:0}.pressed{color:var(--muted);font:12px ui-monospace,SFMono-Regular,Menlo,monospace;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.gamepad{display:block;width:100%;max-height:360px;transition:opacity .2s}.gamepad.disconnected{opacity:.45}.shell{fill:#101725;stroke:#34435b;stroke-width:5}.pad-btn{fill:#263349;stroke:#617089;stroke-width:3;transition:fill .06s,stroke .06s,filter .06s}.pad-btn.active{fill:var(--green);stroke:var(--green2);filter:drop-shadow(0 0 8px #50e19baa)}.pad-label{fill:#dce4ef;font:500 15px -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;text-anchor:middle;dominant-baseline:central;pointer-events:none}.stick-ring{fill:#1a2435;stroke:#53627a;stroke-width:5}.stick.active .stick-ring{stroke:var(--green2);filter:drop-shadow(0 0 8px #50e19b88)}.stick-knob{fill:#334158;stroke:#718099;stroke-width:3;transition:transform .025s linear}.trigger-track{fill:#263349}.trigger-fill{fill:var(--green2);transition:height .025s linear,y .025s linear}.trigger-label{fill:#9cabc1;font:500 13px -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;text-anchor:middle}.center-label{fill:#728198;font:500 11px ui-monospace,SFMono-Regular,Menlo,monospace;text-anchor:middle}
-@media(max-width:680px){.grid{grid-template-columns:1fr}.wrap{margin:22px auto}.meta{grid-template-columns:1fr}.entry{grid-template-columns:62px 58px 1fr;padding-inline:13px}}
+.settingscard{grid-column:1/-1}.settingshead{display:flex;justify-content:space-between;align-items:flex-start;gap:20px;margin-bottom:16px}.settingshead h2{font-size:16px;margin:0 0 5px}.settingshead p{color:var(--muted);font-size:12px;margin:0}.settingrows{display:grid;gap:7px}.settingrow{display:grid;grid-template-columns:1.1fr 1.4fr .65fr .65fr;gap:10px;align-items:center;background:#101725;border:1px solid #243047;border-radius:10px;padding:9px 12px}.settingrow.head{background:none;border:0;color:var(--muted);font-size:12px;padding-block:0}.settingrow select,.settingrow input[type=number]{width:100%;background:#182235;color:var(--text);border:1px solid #34435b;border-radius:8px;padding:8px}.turboctl{display:flex;align-items:center;gap:7px}.settingsactions{display:flex;align-items:center;gap:10px;margin-top:15px}.savehint{color:var(--muted);font-size:12px}
+@media(max-width:680px){.grid{grid-template-columns:1fr}.wrap{margin:22px auto}.meta{grid-template-columns:1fr}.entry{grid-template-columns:62px 58px 1fr;padding-inline:13px}.settingrow{grid-template-columns:1fr 1fr}.settingrow.head{display:none}}
 </style>
 </head>
 <body><main class="wrap">
@@ -245,6 +257,12 @@ HTML = r"""<!doctype html>
     <circle cx="380" cy="216" r="27" fill="#1a2435" stroke="#34435b" stroke-width="4"/><path d="M367 216h26M380 203v26" stroke="#718099" stroke-width="3" stroke-linecap="round"/>
   </svg>
 </div>
+<div class="card settingscard">
+  <div class="settingshead"><div><h2>按键映射与连击</h2><p>修改后立即生效并保存到本机；频率范围 1–30 Hz。</p></div></div>
+  <div class="settingrow head"><span>Vita 输入</span><span>Xbox 输出</span><span>连击</span><span>频率</span></div>
+  <div id="settingRows" class="settingrows"></div>
+  <div class="settingsactions"><button id="saveSettings" class="btn start">保存设置</button><button id="resetSettings" class="btn pause">恢复默认</button><span id="settingsMessage" class="savehint"></span></div>
+</div>
 <div class="card logcard"><div class="loghead"><h2>运行日志</h2><button id="clear" class="clear">清空显示</button></div><div id="logs" class="logs"></div></div>
 </section></main>
 <script>
@@ -252,10 +270,17 @@ const TOKEN="__TOKEN__";let last=0;const $=id=>document.getElementById(id);
 const labels={paused:"已暂停",starting:"正在开启",running:"运行中",stopping:"正在暂停"};
 const buttonNames=[[1,"×"],[2,"○"],[4,"□"],[8,"△"],[16,"L1"],[32,"R1"],[64,"Select"],[128,"Start"],[256,"L3"],[512,"R3"],[1024,"上"],[2048,"下"],[4096,"左"],[8192,"右"]];
 function duration(n){const h=String(Math.floor(n/3600)).padStart(2,"0"),m=String(Math.floor(n%3600/60)).padStart(2,"0"),s=String(n%60).padStart(2,"0");return `${h}:${m}:${s}`}
-async function api(path,method="GET"){const r=await fetch(path,{method,headers:{"X-Vita-Token":TOKEN}});return r.json()}
+async function api(path,method="GET",body=null){const headers={"X-Vita-Token":TOKEN};if(body!==null)headers["Content-Type"]="application/json";const r=await fetch(path,{method,headers,body:body===null?null:JSON.stringify(body)});const data=await r.json();if(!r.ok)throw new Error(data.error||`HTTP ${r.status}`);return data}
 function updateInput(i){if(!i)return;document.querySelectorAll("[data-mask]").forEach(el=>el.classList.toggle("active",Boolean(i.buttons&Number(el.dataset.mask))));const move=(id,x,y)=>$(id).setAttribute("transform",`translate(${((x-128)/127*18).toFixed(1)} ${((y-128)/127*18).toFixed(1)})`);move("leftKnob",i.lx,i.ly);move("rightKnob",i.rx,i.ry);const trigger=(id,v)=>{const h=v/255*76;$(id).setAttribute("y",128-h);$(id).setAttribute("height",h)};trigger("ltFill",i.lt);trigger("rtFill",i.rt);const names=buttonNames.filter(([m])=>i.buttons&m).map(([,n])=>n);if(i.lt)names.push(`L2 ${Math.round(i.lt/255*100)}%`);if(i.rt)names.push(`R2 ${Math.round(i.rt/255*100)}%`);$("pressed").textContent=names.length?names.join("  ·  "):"无按键按下"}
 async function refresh(){try{const s=await api("/api/status");$("state").textContent=labels[s.status]||s.status;$("dot").className="dot "+s.status;$("vita").textContent=s.connected||"尚未连接";$("gamepad").classList.toggle("disconnected",!s.connected);$("uptime").textContent=duration(s.uptime);$("port").textContent=`${s.inputPort} / 发现 ${s.discoveryPort}`;$("backend").textContent=s.backend;$("start").disabled=["running","starting","stopping"].includes(s.status);$("pause").disabled=["paused","stopping"].includes(s.status);$("error").style.display=s.error?"block":"none";$("error").textContent=s.error||"";updateInput(s.input);const logs=await api("/api/logs?after="+last);for(const e of logs.logs){last=Math.max(last,e.id);const row=document.createElement("div");row.className="entry";row.innerHTML=`<span class="time">${e.time}</span><span class="level ${e.level}">${e.level}</span><span class="message"></span>`;row.lastChild.textContent=e.message;$("logs").appendChild(row);$("logs").scrollTop=$("logs").scrollHeight}}catch(e){}}
 $("start").onclick=()=>api("/api/start","POST").then(refresh);$("pause").onclick=()=>api("/api/pause","POST").then(refresh);$("clear").onclick=()=>{$("logs").replaceChildren()};refresh();setInterval(refresh,750);
+let settingsData=null;
+function renderSettings(data,useDefaults=false){settingsData=data;const bindings=useDefaults?data.defaults:data.bindings;$("settingRows").replaceChildren();for(const source of data.sources){const value=bindings[source.id],row=document.createElement("div");row.className="settingrow";const label=document.createElement("span");label.textContent=source.label;const select=document.createElement("select");select.dataset.source=source.id;for(const target of data.targets){const option=document.createElement("option");option.value=target.id;option.textContent=target.label;option.selected=target.id===value.target;select.appendChild(option)}const turboWrap=document.createElement("label");turboWrap.className="turboctl";const turbo=document.createElement("input");turbo.type="checkbox";turbo.checked=value.turbo;turbo.dataset.turbo=source.id;turboWrap.append(turbo,document.createTextNode("开启"));const hz=document.createElement("input");hz.type="number";hz.min="1";hz.max="30";hz.step="1";hz.value=value.frequency;hz.dataset.frequency=source.id;row.append(label,select,turboWrap,hz);$("settingRows").appendChild(row)}}
+function collectSettings(){const bindings={};for(const source of settingsData.sources){bindings[source.id]={target:document.querySelector(`[data-source="${source.id}"]`).value,turbo:document.querySelector(`[data-turbo="${source.id}"]`).checked,frequency:Number(document.querySelector(`[data-frequency="${source.id}"]`).value)}}return {version:1,bindings}}
+async function loadSettings(){try{renderSettings(await api("/api/settings"))}catch(e){$("settingsMessage").textContent=e.message}}
+$("saveSettings").onclick=async()=>{try{await api("/api/settings","POST",collectSettings());$("settingsMessage").textContent="已保存并立即生效";setTimeout(()=>$("settingsMessage").textContent="",2500)}catch(e){$("settingsMessage").textContent=e.message}};
+$("resetSettings").onclick=()=>{if(settingsData){renderSettings(settingsData,true);$("settingsMessage").textContent="默认值已载入，点击保存后生效"}};
+loadSettings();
 const events=new EventSource("/api/events?token="+encodeURIComponent(TOKEN));events.onmessage=e=>{try{updateInput(JSON.parse(e.data))}catch(_){}};
 </script></body></html>"""
 
@@ -282,6 +307,21 @@ def make_handler(
             self.send_header("Cache-Control", "no-store")
             self.end_headers()
             self.wfile.write(body)
+
+        def _read_json(self) -> dict[str, object]:
+            try:
+                length = int(self.headers.get("Content-Length", "0"))
+            except ValueError as exc:
+                raise ValueError("Content-Length 无效") from exc
+            if not 0 < length <= 65536:
+                raise ValueError("请求内容为空或过大")
+            try:
+                payload = json.loads(self.rfile.read(length))
+            except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+                raise ValueError("JSON 格式无效") from exc
+            if not isinstance(payload, dict):
+                raise ValueError("JSON 根节点必须是对象")
+            return payload
 
         def _events(self) -> None:
             subscriber = controller.subscribe()
@@ -338,6 +378,9 @@ def make_handler(
                     after = 0
                 self._json({"logs": controller.logs_after(after)})
                 return
+            if parsed.path == "/api/settings":
+                self._json(controller.settings())
+                return
             self._json({"error": "not found"}, HTTPStatus.NOT_FOUND)
 
         def do_POST(self) -> None:
@@ -351,6 +394,17 @@ def make_handler(
             if self.path == "/api/pause":
                 ok, message = controller.pause()
                 self._json({"ok": ok, "message": message})
+                return
+            if self.path == "/api/settings":
+                try:
+                    controller.update_settings(self._read_json())
+                except ValueError as exc:
+                    self._json(
+                        {"ok": False, "error": str(exc)},
+                        HTTPStatus.BAD_REQUEST,
+                    )
+                    return
+                self._json({"ok": True})
                 return
             self._json({"error": "not found"}, HTTPStatus.NOT_FOUND)
 
@@ -369,6 +423,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--timeout-ms", type=int, default=300)
     parser.add_argument("--ui-port", type=int, default=8765)
     parser.add_argument("--no-browser", action="store_true")
+    parser.add_argument("--config", help="按键映射 JSON 配置文件路径")
     return parser
 
 
@@ -381,6 +436,7 @@ def main() -> None:
         discovery_port=args.discovery_port,
         allow=args.allow,
         timeout_ms=args.timeout_ms,
+        config_path=args.config,
     )
     token = secrets.token_urlsafe(24)
     server = ThreadingHTTPServer(

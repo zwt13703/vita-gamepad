@@ -4,6 +4,7 @@ import argparse
 import sys
 
 from vitapad.backends import create_backend
+from vitapad.mapping import MappingManager
 from vitapad.receiver import Receiver
 
 
@@ -23,6 +24,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--timeout-ms", type=int, default=300, help="断线释放按键时间"
     )
+    parser.add_argument("--config", help="按键映射 JSON 配置文件路径")
     return parser
 
 
@@ -41,6 +43,7 @@ def main() -> None:
             discovery_port=args.discovery_port,
             allow=args.allow,
             timeout_ms=args.timeout_ms,
+            mapping=MappingManager(args.config),
         )
         receiver.run()
     except KeyboardInterrupt:

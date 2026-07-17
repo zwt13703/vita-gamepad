@@ -8,6 +8,7 @@ from collections.abc import Callable
 from contextlib import suppress
 
 from vitapad.backends import GamepadBackend
+from vitapad.mapping import MappingManager
 from vitapad.protocol import (
     DISCOVERY_MAGIC,
     InputState,
@@ -33,6 +34,7 @@ class Receiver:
         timeout_ms: int = 300,
         log: Callable[[str], None] = print,
         on_input: Callable[[InputState], None] | None = None,
+        mapping: MappingManager | None = None,
     ) -> None:
         self.backend = backend
         self.bind = bind
@@ -42,6 +44,7 @@ class Receiver:
         self.timeout = timeout_ms / 1000.0
         self.log = log
         self.on_input = on_input
+        self.mapping = mapping
         self._stop = threading.Event()
         self._last_packet = 0.0
         self._connected_address: str | None = None
@@ -161,9 +164,10 @@ class Receiver:
             self._last_sequence = state.sequence
             self._last_packet = time.monotonic()
             self._neutral_sent = False
-            self.backend.update(state)
+            output_state = self.mapping.apply(state) if self.mapping else state
+            self.backend.update(output_state)
             if self.on_input is not None:
-                self.on_input(state)
+                self.on_input(output_state)
 
     def _receive_usb(self) -> None:
         try:
@@ -188,6 +192,8 @@ class Receiver:
                 and time.monotonic() - self._last_packet >= self.timeout
             ):
                 self.backend.update(InputState.neutral())
+                if self.mapping is not None:
+                    self.mapping.reset()
                 if self.on_input is not None:
                     self.on_input(InputState.neutral())
                 self._neutral_sent = True

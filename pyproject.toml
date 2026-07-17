@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "vita-gamepad"
-version = "0.3.2"
+version = "0.4.0"
 description = "Use a PlayStation Vita as a low-latency network gamepad"
 readme = "README.md"
 requires-python = ">=3.10"

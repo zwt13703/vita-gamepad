@@ -1,4 +1,6 @@
 import socket
+from pathlib import Path
+import tempfile
 import time
 import unittest
 from unittest.mock import patch
@@ -84,6 +86,37 @@ class DashboardControllerTests(unittest.TestCase):
         self.assertEqual(subscriber.get_nowait(), state)
         self.assertEqual(controller.status()["input"]["buttons"], state.buttons)
         controller.unsubscribe(subscriber)
+
+    def test_mapping_settings_are_persisted(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "settings.json"
+            controller = DashboardController(
+                backend_name="debug",
+                bind="127.0.0.1",
+                port=unused_udp_port(),
+                discovery_port=unused_udp_port(),
+                allow=None,
+                timeout_ms=100,
+                config_path=str(path),
+            )
+            settings = controller.settings()
+            settings["bindings"]["a"]["target"] = "b"
+            settings["bindings"]["a"]["turbo"] = True
+            settings["bindings"]["a"]["frequency"] = 12
+            controller.update_settings(settings)
+            restored = DashboardController(
+                backend_name="debug",
+                bind="127.0.0.1",
+                port=unused_udp_port(),
+                discovery_port=unused_udp_port(),
+                allow=None,
+                timeout_ms=100,
+                config_path=str(path),
+            )
+            binding = restored.settings()["bindings"]["a"]
+            self.assertEqual(binding["target"], "b")
+            self.assertTrue(binding["turbo"])
+            self.assertEqual(binding["frequency"], 12.0)
 
 
 if __name__ == "__main__":
