@@ -3,6 +3,8 @@
 #include <psp2/kernel/threadmgr.h>
 #include <psp2/net/net.h>
 #include <psp2/net/netctl.h>
+#include <psp2/power.h>
+#include <psp2/rtc.h>
 #include <psp2/sysmodule.h>
 #include <psp2/touch.h>
 #include <vita2d.h>
@@ -14,7 +16,10 @@
 
 #define INPUT_PORT 5000
 #define DISCOVERY_PORT 5001
-#define SEND_INTERVAL_US 8333
+#define POLL_INTERVAL_US 8333
+#define IDLE_HEARTBEAT_US 100000
+#define DRAW_INTERVAL_US 100000
+#define STATUS_INTERVAL_US 1000000
 #define DISCOVERY_MAGIC "VGPD_HOST_V1"
 #define VITA_DISCOVERY_MAGIC "VGPD_VITA_V1"
 #define PACKET_MAGIC "VGPD"
@@ -26,6 +31,12 @@ typedef struct HostEntry {
     SceNetSockaddrIn address;
     uint64_t last_seen_us;
 } HostEntry;
+
+typedef struct DeviceStatus {
+    char time_text[6];
+    int battery_percent;
+    bool charging;
+} DeviceStatus;
 
 enum ProtocolButton {
     BTN_A = 1u << 0,
@@ -251,6 +262,88 @@ static void make_packet(
     packet->ry = pad->ry;
 }
 
+static bool input_matches(
+    const InputPacket *left, const InputPacket *right
+) {
+    return left->flags == right->flags &&
+           left->buttons == right->buttons &&
+           left->lx == right->lx && left->ly == right->ly &&
+           left->rx == right->rx && left->ry == right->ry &&
+           left->lt == right->lt && left->rt == right->rt;
+}
+
+static void update_device_status(DeviceStatus *status) {
+    SceDateTime local_time;
+    memset(&local_time, 0, sizeof(local_time));
+    if (sceRtcGetCurrentClockLocalTime(&local_time) >= 0) {
+        unsigned int hour = (unsigned int)local_time.hour % 24;
+        unsigned int minute = (unsigned int)local_time.minute % 60;
+        snprintf(
+            status->time_text, sizeof(status->time_text), "%02u:%02u",
+            hour, minute
+        );
+    } else {
+        snprintf(status->time_text, sizeof(status->time_text), "--:--");
+    }
+    int battery = scePowerGetBatteryLifePercent();
+    if (battery < 0) battery = 0;
+    if (battery > 100) battery = 100;
+    status->battery_percent = battery;
+    status->charging = scePowerIsBatteryCharging() == SCE_TRUE;
+}
+
+static void draw_status_bar(vita2d_pgf *font, const DeviceStatus *status) {
+    const float battery_x = 833.0f;
+    const float battery_y = 35.0f;
+    const float battery_width = 48.0f;
+    const float battery_height = 20.0f;
+    uint32_t battery_color = status->charging
+        ? RGBA8(80, 225, 155, 255)
+        : status->battery_percent <= 20
+            ? RGBA8(255, 105, 105, 255)
+            : RGBA8(180, 190, 205, 255);
+
+    vita2d_pgf_draw_text(
+        font, 744, 54, RGBA8(220, 230, 240, 255), 0.78f,
+        status->time_text
+    );
+    vita2d_draw_rectangle(
+        battery_x, battery_y, battery_width, 2, RGBA8(180, 190, 205, 255)
+    );
+    vita2d_draw_rectangle(
+        battery_x, battery_y + battery_height - 2,
+        battery_width, 2, RGBA8(180, 190, 205, 255)
+    );
+    vita2d_draw_rectangle(
+        battery_x, battery_y, 2, battery_height,
+        RGBA8(180, 190, 205, 255)
+    );
+    vita2d_draw_rectangle(
+        battery_x + battery_width - 2, battery_y, 2, battery_height,
+        RGBA8(180, 190, 205, 255)
+    );
+    vita2d_draw_rectangle(
+        battery_x + battery_width, battery_y + 6, 4, 8,
+        RGBA8(180, 190, 205, 255)
+    );
+    float fill_width =
+        (battery_width - 6) * (float)status->battery_percent / 100.0f;
+    if (fill_width > 0) {
+        vita2d_draw_rectangle(
+            battery_x + 3, battery_y + 3, fill_width,
+            battery_height - 6, battery_color
+        );
+    }
+    char battery_text[12];
+    snprintf(
+        battery_text, sizeof(battery_text), "%d%%%s",
+        status->battery_percent, status->charging ? "+" : ""
+    );
+    vita2d_pgf_draw_text(
+        font, 894, 54, battery_color, 0.72f, battery_text
+    );
+}
+
 static void format_ip(const SceNetSockaddrIn *address, char *out, size_t size) {
     uint32_t ip = sceNetNtohl(address->sin_addr.s_addr);
     snprintf(
@@ -264,7 +357,7 @@ static void draw_ui(
     vita2d_pgf *font, bool connected, const char *host_ip,
     uint32_t sent, int connection_error,
     const HostEntry *hosts, unsigned int host_count,
-    unsigned int selected_host
+    unsigned int selected_host, const DeviceStatus *device_status
 ) {
     vita2d_start_drawing();
     vita2d_clear_screen();
@@ -273,6 +366,7 @@ static void draw_ui(
     vita2d_pgf_draw_text(
         font, 54, 92, RGBA8(255, 255, 255, 255), 1.6f, "Vita Gamepad"
     );
+    draw_status_bar(font, device_status);
     vita2d_pgf_draw_text(
         font, 54, 132, RGBA8(180, 190, 205, 255), 0.8f,
         "Connection: Wi-Fi"
@@ -392,9 +486,19 @@ int main(void) {
     uint32_t sequence = 0;
     uint32_t sent = 0;
     uint32_t exit_frames = 0;
-    uint32_t draw_divider = 0;
     uint32_t discovery_frames = 0;
     uint32_t previous_buttons = 0;
+    InputPacket last_sent_packet;
+    memset(&last_sent_packet, 0, sizeof(last_sent_packet));
+    bool has_last_sent_packet = false;
+    uint64_t last_send_us = 0;
+    uint64_t next_draw_us = 0;
+    uint64_t next_status_us = 0;
+    DeviceStatus device_status;
+    memset(&device_status, 0, sizeof(device_status));
+    update_device_status(&device_status);
+    next_status_us =
+        sceKernelGetProcessTimeWide() + STATUS_INTERVAL_US;
 
     while (!exiting) {
         uint64_t now_us = sceKernelGetProcessTimeWide();
@@ -455,6 +559,7 @@ int main(void) {
                     connected = true;
                     sequence = 0;
                     sent = 0;
+                    has_last_sent_packet = false;
                     format_ip(&host, host_ip, sizeof(host_ip));
                     consume_connect_button = true;
                 }
@@ -475,29 +580,45 @@ int main(void) {
 
             if (connected) {
                 InputPacket packet;
-                make_packet(&packet, &pad, sequence++);
-                int result = sceNetSendto(
-                    sock, &packet, sizeof(packet), 0,
-                    (SceNetSockaddr *)&host, sizeof(host)
-                );
-                if (result == (int)sizeof(packet)) {
-                    sent++;
-                } else if (result < 0) {
-                    connected = false;
-                    network_result = result;
+                make_packet(&packet, &pad, sequence);
+                bool input_changed =
+                    !has_last_sent_packet ||
+                    !input_matches(&packet, &last_sent_packet);
+                bool heartbeat_due =
+                    now_us - last_send_us >= IDLE_HEARTBEAT_US;
+                if (input_changed || heartbeat_due) {
+                    packet.sequence = sceNetHtonl(sequence++);
+                    int result = sceNetSendto(
+                        sock, &packet, sizeof(packet), 0,
+                        (SceNetSockaddr *)&host, sizeof(host)
+                    );
+                    if (result == (int)sizeof(packet)) {
+                        last_sent_packet = packet;
+                        has_last_sent_packet = true;
+                        last_send_us = now_us;
+                        sent++;
+                    } else if (result < 0) {
+                        connected = false;
+                        has_last_sent_packet = false;
+                        network_result = result;
+                    }
                 }
             }
             previous_buttons = pad.buttons;
         }
 
-        if (++draw_divider >= 4) {
+        if (now_us >= next_status_us) {
+            update_device_status(&device_status);
+            next_status_us = now_us + STATUS_INTERVAL_US;
+        }
+        if (now_us >= next_draw_us) {
             draw_ui(
                 font, connected, host_ip, sent, network_result,
-                hosts, host_count, selected_host
+                hosts, host_count, selected_host, &device_status
             );
-            draw_divider = 0;
+            next_draw_us = now_us + DRAW_INTERVAL_US;
         }
-        sceKernelDelayThread(SEND_INTERVAL_US);
+        sceKernelDelayThread(POLL_INTERVAL_US);
     }
 
     if (sock >= 0) sceNetSocketClose(sock);
