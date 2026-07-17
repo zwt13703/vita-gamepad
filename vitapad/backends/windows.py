@@ -29,11 +29,13 @@ BUTTON_MAP = (
 
 
 def _axis(value: int, *, invert: bool = False) -> int:
+    if invert:
+        if value >= 128:
+            return round((128 - value) * 32768 / 127)
+        return round((128 - value) * 32767 / 128)
     if value >= 128:
-        result = round((value - 128) * 32767 / 127)
-    else:
-        result = round((value - 128) * 32768 / 128)
-    return -result if invert else result
+        return round((value - 128) * 32767 / 127)
+    return round((value - 128) * 32768 / 128)
 
 
 class WindowsGamepad:
