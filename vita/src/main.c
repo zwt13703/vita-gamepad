@@ -457,7 +457,15 @@ int main(void) {
                     int usb_result = sceUsbSerialStart();
                     if (usb_result >= 0) {
                         usb_started = true;
-                        usb_result = sceUsbSerialSetup(0);
+                        /*
+                         * Type D serial uses setup mode 1. Mode 0 can leave the
+                         * USB serial service stuck while activating the UDC.
+                        */
+                        usb_result = sceUsbSerialSetup(1);
+                        if (usb_result < 0) {
+                            sceUsbSerialClose();
+                            usb_started = false;
+                        }
                     }
                     network_result = usb_result;
                 } else {
@@ -555,7 +563,7 @@ int main(void) {
                     );
                 } else {
                     result = (int)sceUsbSerialSend(
-                        &packet, sizeof(packet), 0, 0
+                        &packet, sizeof(packet), 0, -1
                     );
                 }
                 if (result == (int)sizeof(packet)) {

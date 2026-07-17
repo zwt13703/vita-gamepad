@@ -103,7 +103,9 @@ vita/build/vita-gamepad.vpk
 
 ### 6. 使用 USB 数据线连接
 
-USB 模式目前主要面向 Windows，使用 VitaSDK 的 USB Serial 数据通道。
+USB 模式目前主要面向 Windows，使用 VitaSDK 的 USB Serial Type D 数据通道。
+请安装 `01.04` 或更高版本的 VPK；旧版 `01.03` 的 USB 初始化参数可能造成
+切换到 USB 时界面卡住。
 
 1. 电脑控制面板保持“开启使用”。
 2. 在 Vita 中按 `Start + △`，切换到 `USB cable`。
