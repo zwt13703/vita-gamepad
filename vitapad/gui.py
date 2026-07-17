@@ -216,7 +216,7 @@ HTML = r"""<!doctype html>
   <div class="actions"><button id="start" class="btn start">开启使用</button><button id="pause" class="btn pause">暂停</button></div>
   <div id="error" class="errorbox"></div>
 </div>
-<div class="card"><p class="hint">开启后，程序会广播发现信号并等待同一 Wi-Fi 下的 PSVita。<br><br>暂停时会立即发送中立状态、释放所有按键并移除虚拟手柄。再次开启即可重新连接。<br><br>请保持此程序运行；关闭这个网页不会停止后台接收服务。</p></div>
+<div class="card"><p class="hint">开启后，程序会同时等待 Wi-Fi 和 USB 数据线连接。Wi-Fi 使用双向发现，适合有多网卡或 VPN 的电脑。<br><br>在 Vita 端按 START + △ 可切换 Wi-Fi / USB。USB 首次使用需要为 “PS Vita Type D” 安装 WinUSB 驱动。<br><br>暂停时会释放全部按键并移除虚拟手柄；关闭网页不会停止后台接收服务。</p></div>
 <div class="card testcard">
   <div class="testhead"><h2>实时按键测试</h2><div id="pressed" class="pressed">等待手柄输入</div></div>
   <svg id="gamepad" class="gamepad disconnected" viewBox="0 0 760 330" role="img" aria-label="PSVita 实时手柄输入预览">

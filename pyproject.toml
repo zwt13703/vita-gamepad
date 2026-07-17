@@ -4,16 +4,17 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "vita-gamepad"
-version = "0.2.1"
+version = "0.3.1"
 description = "Use a PlayStation Vita as a low-latency network gamepad"
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }
 authors = [{ name = "Vita Gamepad contributors" }]
-dependencies = []
+dependencies = ["psutil>=5.9"]
 
 [project.optional-dependencies]
 windows = ["vgamepad>=0.1.0"]
+usb = ["pyusb>=1.2.1", "libusb-package>=1.0.26.2"]
 
 [project.scripts]
 vitapad = "vitapad.cli:main"

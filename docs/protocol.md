@@ -1,7 +1,16 @@
 # Vita Gamepad 网络协议 v1
 
-电脑每秒向 UDP `5001` 广播一次 ASCII 文本 `VGPD_HOST_V1`。Vita 收到后，将该
-数据包的来源 IP 作为接收端，并向其 UDP `5000` 端口发送输入包。
+电脑每秒向每块网卡的定向广播地址及 `255.255.255.255:5001` 广播一次 ASCII
+文本 `VGPD_HOST_V1`。Vita 也会每秒广播 `VGPD_VITA_V1`；电脑收到后向 Vita
+来源地址单播回复 `VGPD_HOST_V1`。任意方向的发现成功后，Vita 将电脑 IP 作为
+接收端，并向其 UDP `5000` 端口发送输入包。双向发现用于绕过 Windows 多网卡、
+VPN 和广播路由选择问题。Vita 按来源 IPv4 地址对电脑去重，保留最近 5 秒内
+仍发送发现信号的主机，最多显示 8 台。用户在 Vita 列表中选择目标后才开始发送
+输入包，不会自动连接最先响应的电脑。
+
+USB 模式复用相同的 20 字节输入包，通过 VitaSDK `SceUsbSerial` 发送。电脑端
+通过 WinUSB/libusb 读取 “PS Vita Type D” 的 Bulk IN 端点，因此 Wi-Fi 与 USB
+的按键协议完全一致。
 
 所有多字节整数均为网络字节序。输入包固定为 20 字节：
 

@@ -2,8 +2,16 @@ import socket
 import threading
 import time
 import unittest
+from types import SimpleNamespace
+from unittest.mock import patch
 
-from vitapad.protocol import Buttons, InputState, encode_packet
+from vitapad.protocol import (
+    DISCOVERY_MAGIC,
+    VITA_DISCOVERY_MAGIC,
+    Buttons,
+    InputState,
+    encode_packet,
+)
 from vitapad.receiver import Receiver
 
 
@@ -28,6 +36,57 @@ def unused_udp_port() -> int:
 
 
 class ReceiverTests(unittest.TestCase):
+    def test_discovery_targets_include_interface_broadcasts(self) -> None:
+        backend = FakeBackend()
+        addresses = {
+            "Wi-Fi": [
+                SimpleNamespace(
+                    family=socket.AF_INET,
+                    address="192.168.1.5",
+                    netmask="255.255.255.0",
+                )
+            ],
+            "Link local": [
+                SimpleNamespace(
+                    family=socket.AF_INET,
+                    address="169.254.1.2",
+                    netmask="255.255.0.0",
+                )
+            ],
+        }
+        with patch("vitapad.receiver.psutil.net_if_addrs", return_value=addresses):
+            targets = Receiver(backend)._discovery_targets()
+        self.assertIn("192.168.1.255", targets)
+        self.assertIn("255.255.255.255", targets)
+        self.assertNotIn("169.254.255.255", targets)
+
+    def test_vita_discovery_probe_gets_unicast_reply(self) -> None:
+        backend = FakeBackend()
+        port = unused_udp_port()
+        discovery_port = unused_udp_port()
+        receiver = Receiver(
+            backend,
+            bind="127.0.0.1",
+            port=port,
+            discovery_port=discovery_port,
+        )
+        thread = threading.Thread(target=receiver.run)
+        thread.start()
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as probe:
+                probe.bind(("127.0.0.1", 0))
+                probe.settimeout(1)
+                time.sleep(0.05)
+                probe.sendto(
+                    VITA_DISCOVERY_MAGIC, ("127.0.0.1", discovery_port)
+                )
+                data, _address = probe.recvfrom(64)
+                self.assertEqual(data, DISCOVERY_MAGIC)
+        finally:
+            receiver.stop()
+            thread.join(timeout=2)
+        self.assertFalse(thread.is_alive())
+
     def test_receive_and_failsafe(self) -> None:
         backend = FakeBackend()
         input_events: list[InputState] = []
