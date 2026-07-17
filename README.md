@@ -2,6 +2,7 @@
 
 [![Python 3.10+](https://img.shields.io/badge/Python-3.10%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
 [![Platform](https://img.shields.io/badge/Platform-PS%20Vita%20%2B%20Windows-5C2D91)](#运行要求)
+[![Build](https://github.com/zwt13703/vita-gamepad/actions/workflows/build.yml/badge.svg)](https://github.com/zwt13703/vita-gamepad/actions/workflows/build.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
 把安装了 HENkaku 自制软件环境的 PlayStation Vita 变成低延迟无线游戏手柄。
@@ -261,6 +262,42 @@ dist\windows\VitaGamepadDashboard.exe
 ```
 
 目标电脑仍需安装 ViGEmBus。
+
+## GitHub Actions 自动构建
+
+仓库内置的 [Build 工作流](.github/workflows/build.yml)会自动执行：
+
+- 对 `main` 的 push 和 pull request 运行 Python 测试
+- 构建 `VitaGamepadDashboard.exe`
+- 使用 VitaSDK 构建 `vita-gamepad.vpk`
+- 将 EXE 和 VPK 保存为 Actions Artifacts，保留 30 天
+- 推送 `v*` 标签时创建 GitHub Release，并附带 SHA256 校验文件
+
+### 手动构建
+
+1. 打开 GitHub 仓库的 **Actions** 页面。
+2. 选择左侧的 **Build**。
+3. 点击 **Run workflow**。
+4. 构建完成后，在运行详情页面底部下载 Artifacts。
+
+### 发布版本
+
+先更新 `pyproject.toml` 中的电脑端版本和 `vita/CMakeLists.txt` 中的 Vita 版本，
+提交后创建版本标签。例如：
+
+```powershell
+git tag -a v0.4.1 -m "Vita Gamepad v0.4.1"
+git push origin main
+git push origin v0.4.1
+```
+
+标签推送完成后，GitHub Actions 会自动创建 Release，并上传：
+
+```text
+VitaGamepadDashboard.exe
+vita-gamepad.vpk
+SHA256SUMS.txt
+```
 
 ## 构建 Vita VPK
 
