@@ -30,6 +30,7 @@ def unused_udp_port() -> int:
 class ReceiverTests(unittest.TestCase):
     def test_receive_and_failsafe(self) -> None:
         backend = FakeBackend()
+        input_events: list[InputState] = []
         port = unused_udp_port()
         receiver = Receiver(
             backend,
@@ -37,6 +38,7 @@ class ReceiverTests(unittest.TestCase):
             port=port,
             discovery_port=unused_udp_port(),
             timeout_ms=50,
+            on_input=input_events.append,
         )
         thread = threading.Thread(target=receiver.run)
         thread.start()
@@ -51,6 +53,8 @@ class ReceiverTests(unittest.TestCase):
                 time.sleep(0.01)
             self.assertEqual(backend.states[0], state)
             self.assertEqual(backend.states[1], InputState.neutral())
+            self.assertEqual(input_events[0], state)
+            self.assertEqual(input_events[1], InputState.neutral())
         finally:
             receiver.stop()
             thread.join(timeout=2)

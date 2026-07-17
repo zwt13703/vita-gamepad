@@ -56,31 +56,6 @@ _Static_assert(sizeof(InputPacket) == 20, "InputPacket must be exactly 20 bytes"
 static uint8_t net_memory[1024 * 1024];
 static volatile bool exiting = false;
 
-static int exit_callback(int argc, const void *args) {
-    (void)argc;
-    (void)args;
-    exiting = true;
-    return 0;
-}
-
-static int callback_thread(SceSize args, void *argp) {
-    (void)args;
-    (void)argp;
-    int callback = sceKernelCreateCallback("Exit callback", exit_callback, NULL);
-    sceKernelRegisterExitCallback(callback);
-    sceKernelDelayThreadCB(0xFFFFFFFF);
-    return 0;
-}
-
-static void setup_callbacks(void) {
-    int thread = sceKernelCreateThread(
-        "callback thread", callback_thread, 0x10000100, 0x1000, 0, 0, NULL
-    );
-    if (thread >= 0) {
-        sceKernelStartThread(thread, 0, NULL);
-    }
-}
-
 static int init_network(void) {
     int result = sceSysmoduleLoadModule(SCE_SYSMODULE_NET);
     if (result < 0) {
@@ -264,7 +239,6 @@ static void draw_ui(
 }
 
 int main(void) {
-    setup_callbacks();
     sceCtrlSetSamplingMode(SCE_CTRL_MODE_ANALOG_WIDE);
     sceTouchSetSamplingState(SCE_TOUCH_PORT_FRONT, SCE_TOUCH_SAMPLING_STATE_START);
     sceTouchSetSamplingState(SCE_TOUCH_PORT_BACK, SCE_TOUCH_SAMPLING_STATE_START);

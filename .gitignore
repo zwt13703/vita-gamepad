@@ -1,7 +1,10 @@
 __pycache__/
 *.py[cod]
 .venv/
+.build-venv/
+.idea/
 *.egg-info/
+build/
+dist/
 vita/build/
 .DS_Store
-

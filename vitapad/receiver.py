@@ -3,6 +3,7 @@ from __future__ import annotations
 import socket
 import threading
 import time
+from collections.abc import Callable
 
 from vitapad.backends import GamepadBackend
 from vitapad.protocol import (
@@ -22,6 +23,8 @@ class Receiver:
         discovery_port: int = 5001,
         allow: str | None = None,
         timeout_ms: int = 300,
+        log: Callable[[str], None] = print,
+        on_input: Callable[[InputState], None] | None = None,
     ) -> None:
         self.backend = backend
         self.bind = bind
@@ -29,6 +32,8 @@ class Receiver:
         self.discovery_port = discovery_port
         self.allow = allow
         self.timeout = timeout_ms / 1000.0
+        self.log = log
+        self.on_input = on_input
         self._stop = threading.Event()
         self._last_packet = 0.0
         self._connected_address: str | None = None
@@ -38,7 +43,7 @@ class Receiver:
     def _broadcast_discovery(self) -> None:
         with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as beacon:
             beacon.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
-            while not self._stop.wait(1.0):
+            while not self._stop.is_set():
                 try:
                     beacon.sendto(
                         DISCOVERY_MAGIC, ("255.255.255.255", self.discovery_port)
@@ -46,6 +51,7 @@ class Receiver:
                 except OSError:
                     # Interfaces can disappear during sleep/network changes.
                     pass
+                self._stop.wait(1.0)
 
     def run(self) -> None:
         discovery = threading.Thread(
@@ -55,9 +61,9 @@ class Receiver:
         with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as listener:
             listener.bind((self.bind, self.port))
             listener.settimeout(0.05)
-            print(
+            self.log(
                 f"正在监听 {self.bind}:{self.port}，后端: {self.backend.name}\n"
-                "等待 PSVita（Ctrl+C 退出）..."
+                "等待 PSVita..."
             )
             try:
                 while not self._stop.is_set():
@@ -66,6 +72,8 @@ class Receiver:
             finally:
                 self._stop.set()
                 discovery.join(timeout=1.2)
+                if self.on_input is not None:
+                    self.on_input(InputState.neutral())
                 self.backend.close()
 
     def _receive_once(self, listener: socket.socket) -> None:
@@ -82,7 +90,7 @@ class Receiver:
         if self._connected_address != address[0]:
             self._connected_address = address[0]
             self._last_sequence = None
-            print(f"已连接 PSVita: {address[0]}")
+            self.log(f"已连接 PSVita: {address[0]}")
         if self._last_sequence is not None and not sequence_is_newer(
             state.sequence, self._last_sequence
         ):
@@ -91,6 +99,8 @@ class Receiver:
         self._last_packet = time.monotonic()
         self._neutral_sent = False
         self.backend.update(state)
+        if self.on_input is not None:
+            self.on_input(state)
 
     def _apply_failsafe(self) -> None:
         if (
@@ -98,9 +108,16 @@ class Receiver:
             and time.monotonic() - self._last_packet >= self.timeout
         ):
             self.backend.update(InputState.neutral())
+            if self.on_input is not None:
+                self.on_input(InputState.neutral())
             self._neutral_sent = True
-            print("连接超时，已释放全部按键；等待重连...")
+            self.log("连接超时，已释放全部按键；等待重连...")
 
     def stop(self) -> None:
         self._stop.set()
 
+    @property
+    def connected_address(self) -> str | None:
+        if self._neutral_sent:
+            return None
+        return self._connected_address

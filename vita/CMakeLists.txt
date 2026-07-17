@@ -14,7 +14,7 @@ include("${VITASDK}/share/vita.cmake" REQUIRED)
 
 set(VITA_APP_NAME "Vita Gamepad")
 set(VITA_TITLEID "VITAPAD01")
-set(VITA_VERSION "01.00")
+set(VITA_VERSION "01.01")
 
 add_executable(vita-gamepad src/main.c)
 target_compile_options(vita-gamepad PRIVATE -Wall -Wextra -Werror -O2)
@@ -37,4 +37,8 @@ vita_create_self(vita-gamepad.self vita-gamepad UNSAFE)
 vita_create_vpk(vita-gamepad.vpk ${VITA_TITLEID} vita-gamepad.self
   VERSION ${VITA_VERSION}
   NAME ${VITA_APP_NAME}
+  FILE sce_sys/icon0.png sce_sys/icon0.png
+  FILE sce_sys/livearea/contents/bg.png sce_sys/livearea/contents/bg.png
+  FILE sce_sys/livearea/contents/startup.png sce_sys/livearea/contents/startup.png
+  FILE sce_sys/livearea/contents/template.xml sce_sys/livearea/contents/template.xml
 )
