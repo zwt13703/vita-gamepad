@@ -5,7 +5,6 @@
 #include <psp2/net/netctl.h>
 #include <psp2/sysmodule.h>
 #include <psp2/touch.h>
-#include <psp2/usbserial.h>
 #include <vita2d.h>
 
 #include <stdbool.h>
@@ -22,11 +21,6 @@
 #define PACKET_VERSION 1
 #define MAX_HOSTS 8
 #define HOST_TIMEOUT_US (5 * 1000 * 1000ULL)
-
-typedef enum ConnectionMode {
-    CONNECTION_WIFI = 0,
-    CONNECTION_USB = 1,
-} ConnectionMode;
 
 typedef struct HostEntry {
     SceNetSockaddrIn address;
@@ -267,8 +261,8 @@ static void format_ip(const SceNetSockaddrIn *address, char *out, size_t size) {
 }
 
 static void draw_ui(
-    vita2d_pgf *font, ConnectionMode mode, bool connected,
-    const char *host_ip, uint32_t sent, int connection_error,
+    vita2d_pgf *font, bool connected, const char *host_ip,
+    uint32_t sent, int connection_error,
     const HostEntry *hosts, unsigned int host_count,
     unsigned int selected_host
 ) {
@@ -279,88 +273,71 @@ static void draw_ui(
     vita2d_pgf_draw_text(
         font, 54, 92, RGBA8(255, 255, 255, 255), 1.6f, "Vita Gamepad"
     );
-    char mode_text[48];
-    snprintf(
-        mode_text, sizeof(mode_text), "Connection: %s",
-        mode == CONNECTION_WIFI ? "Wi-Fi" : "USB cable"
-    );
     vita2d_pgf_draw_text(
-        font, 54, 132, RGBA8(180, 190, 205, 255), 0.8f, mode_text
+        font, 54, 132, RGBA8(180, 190, 205, 255), 0.8f,
+        "Connection: Wi-Fi"
     );
     if (connection_error < 0) {
         char error[96];
         snprintf(
-            error, sizeof(error), "%s error: 0x%08X",
-            mode == CONNECTION_WIFI ? "Network" : "USB", connection_error
+            error, sizeof(error), "Network error: 0x%08X", connection_error
         );
         vita2d_pgf_draw_text(
             font, 54, 176, RGBA8(255, 105, 105, 255), 1.0f, error
         );
     } else if (!connected) {
-        if (mode == CONNECTION_WIFI) {
-            char status[64];
-            snprintf(
-                status, sizeof(status), "Computers found: %u",
-                host_count
-            );
-            vita2d_pgf_draw_text(
-                font, 54, 176, RGBA8(245, 200, 80, 255), 1.0f, status
-            );
-            if (host_count == 0) {
-                vita2d_pgf_draw_text(
-                    font, 54, 218, RGBA8(180, 190, 205, 255), 0.8f,
-                    "Scanning the local network..."
-                );
-            } else {
-                unsigned int first = selected_host > 1 ? selected_host - 1 : 0;
-                if (first + 4 > host_count) {
-                    first = host_count > 4 ? host_count - 4 : 0;
-                }
-                unsigned int end = first + 4;
-                if (end > host_count) end = host_count;
-                for (unsigned int i = first; i < end; ++i) {
-                    float y = 205.0f + (float)(i - first) * 38.0f;
-                    char ip[32];
-                    format_ip(&hosts[i].address, ip, sizeof(ip));
-                    if (i == selected_host) {
-                        vita2d_draw_rectangle(
-                            48, y - 22, 420, 32,
-                            RGBA8(38, 190, 125, 80)
-                        );
-                    }
-                    snprintf(
-                        status, sizeof(status), "%s  %s",
-                        i == selected_host ? ">" : " ", ip
-                    );
-                    vita2d_pgf_draw_text(
-                        font, 62, y, RGBA8(220, 230, 240, 255),
-                        0.82f, status
-                    );
-                }
-                vita2d_pgf_draw_text(
-                    font, 520, 218, RGBA8(180, 190, 205, 255), 0.75f,
-                    "UP / DOWN: select"
-                );
-                vita2d_pgf_draw_text(
-                    font, 520, 256, RGBA8(80, 225, 155, 255), 0.75f,
-                    "X: connect"
-                );
-            }
-        } else {
-            vita2d_pgf_draw_text(
-                font, 54, 176, RGBA8(245, 200, 80, 255), 1.0f,
-                "Connect the Vita to the computer with a USB data cable..."
-            );
+        char status[64];
+        snprintf(
+            status, sizeof(status), "Computers found: %u",
+            host_count
+        );
+        vita2d_pgf_draw_text(
+            font, 54, 176, RGBA8(245, 200, 80, 255), 1.0f, status
+        );
+        if (host_count == 0) {
             vita2d_pgf_draw_text(
                 font, 54, 218, RGBA8(180, 190, 205, 255), 0.8f,
-                "Windows must use WinUSB for the PS Vita Type D device."
+                "Scanning the local network..."
+            );
+        } else {
+            unsigned int first = selected_host > 1 ? selected_host - 1 : 0;
+            if (first + 4 > host_count) {
+                first = host_count > 4 ? host_count - 4 : 0;
+            }
+            unsigned int end = first + 4;
+            if (end > host_count) end = host_count;
+            for (unsigned int i = first; i < end; ++i) {
+                float y = 205.0f + (float)(i - first) * 38.0f;
+                char ip[32];
+                format_ip(&hosts[i].address, ip, sizeof(ip));
+                if (i == selected_host) {
+                    vita2d_draw_rectangle(
+                        48, y - 22, 420, 32,
+                        RGBA8(38, 190, 125, 80)
+                    );
+                }
+                snprintf(
+                    status, sizeof(status), "%s  %s",
+                    i == selected_host ? ">" : " ", ip
+                );
+                vita2d_pgf_draw_text(
+                    font, 62, y, RGBA8(220, 230, 240, 255),
+                    0.82f, status
+                );
+            }
+            vita2d_pgf_draw_text(
+                font, 520, 218, RGBA8(180, 190, 205, 255), 0.75f,
+                "UP / DOWN: select"
+            );
+            vita2d_pgf_draw_text(
+                font, 520, 256, RGBA8(80, 225, 155, 255), 0.75f,
+                "X: connect"
             );
         }
     } else {
         char status[128];
         snprintf(
-            status, sizeof(status), "Connected: %s",
-            mode == CONNECTION_WIFI ? host_ip : "USB"
+            status, sizeof(status), "Connected: %s", host_ip
         );
         vita2d_pgf_draw_text(
             font, 54, 176, RGBA8(80, 225, 155, 255), 1.0f, status
@@ -369,23 +346,17 @@ static void draw_ui(
         vita2d_pgf_draw_text(
             font, 54, 218, RGBA8(180, 190, 205, 255), 0.8f, status
         );
-        if (mode == CONNECTION_WIFI) {
-            vita2d_pgf_draw_text(
-                font, 54, 260, RGBA8(180, 190, 205, 255), 0.72f,
-                "START + O: choose another computer"
-            );
-        }
+        vita2d_pgf_draw_text(
+            font, 54, 260, RGBA8(180, 190, 205, 255), 0.72f,
+            "START + O: choose another computer"
+        );
     }
     vita2d_pgf_draw_text(
         font, 54, 350, RGBA8(180, 190, 205, 255), 0.75f,
         "Rear touch: L2 / R2     Front bottom corners: L3 / R3"
     );
     vita2d_pgf_draw_text(
-        font, 54, 402, RGBA8(80, 225, 155, 255), 0.72f,
-        "Press START + TRIANGLE to switch Wi-Fi / USB"
-    );
-    vita2d_pgf_draw_text(
-        font, 54, 450, RGBA8(140, 150, 165, 255), 0.7f,
+        font, 54, 420, RGBA8(140, 150, 165, 255), 0.7f,
         "Hold START + SELECT for 2 seconds to exit"
     );
     vita2d_end_drawing();
@@ -409,9 +380,6 @@ int main(void) {
     }
 
     bool connected = false;
-    ConnectionMode mode = CONNECTION_WIFI;
-    bool usb_started = false;
-    bool switch_was_pressed = false;
     bool reselect_was_pressed = false;
     bool consume_connect_button = false;
     SceNetSockaddrIn host;
@@ -430,14 +398,14 @@ int main(void) {
 
     while (!exiting) {
         uint64_t now_us = sceKernelGetProcessTimeWide();
-        if (mode == CONNECTION_WIFI && sock >= 0) {
+        if (sock >= 0) {
             SceNetSockaddrIn discovered;
             while (receive_host(sock, &discovered)) {
                 remember_host(hosts, &host_count, &discovered, now_us);
             }
             expire_hosts(hosts, &host_count, &selected_host, now_us);
         }
-        if (mode == CONNECTION_WIFI && sock >= 0 && discovery_frames++ >= 120) {
+        if (sock >= 0 && discovery_frames++ >= 120) {
             send_discovery_probe(sock);
             discovery_frames = 0;
         }
@@ -445,47 +413,11 @@ int main(void) {
         SceCtrlData pad;
         memset(&pad, 0, sizeof(pad));
         if (sceCtrlPeekBufferPositive(0, &pad, 1) > 0) {
-            bool switch_pressed =
-                (pad.buttons & (SCE_CTRL_START | SCE_CTRL_TRIANGLE)) ==
-                (SCE_CTRL_START | SCE_CTRL_TRIANGLE);
-            if (switch_pressed && !switch_was_pressed) {
-                connected = false;
-                sequence = 0;
-                if (mode == CONNECTION_WIFI) {
-                    mode = CONNECTION_USB;
-                    network_result = 0;
-                    int usb_result = sceUsbSerialStart();
-                    if (usb_result >= 0) {
-                        usb_started = true;
-                        /*
-                         * Type D serial uses setup mode 1. Mode 0 can leave the
-                         * USB serial service stuck while activating the UDC.
-                        */
-                        usb_result = sceUsbSerialSetup(1);
-                        if (usb_result < 0) {
-                            sceUsbSerialClose();
-                            usb_started = false;
-                        }
-                    }
-                    network_result = usb_result;
-                } else {
-                    if (usb_started) {
-                        sceUsbSerialClose();
-                        usb_started = false;
-                    }
-                    mode = CONNECTION_WIFI;
-                    network_result = sock >= 0 ? 0 : sock;
-                    if (sock >= 0) send_discovery_probe(sock);
-                }
-            }
-            switch_was_pressed = switch_pressed;
-
             bool reselect_pressed =
                 (pad.buttons & (SCE_CTRL_START | SCE_CTRL_CIRCLE)) ==
                 (SCE_CTRL_START | SCE_CTRL_CIRCLE);
             if (
-                mode == CONNECTION_WIFI && connected &&
-                reselect_pressed && !reselect_was_pressed
+                connected && reselect_pressed && !reselect_was_pressed
             ) {
                 connected = false;
                 sequence = 0;
@@ -512,7 +444,7 @@ int main(void) {
             bool cross_pressed =
                 (pad.buttons & SCE_CTRL_CROSS) &&
                 !(previous_buttons & SCE_CTRL_CROSS);
-            if (mode == CONNECTION_WIFI && !connected && host_count > 0) {
+            if (!connected && host_count > 0) {
                 if (up_pressed) {
                     selected_host =
                         selected_host == 0 ? host_count - 1 : selected_host - 1;
@@ -528,8 +460,7 @@ int main(void) {
                 }
             }
 
-            if (switch_pressed || reselect_pressed) {
-                pad.buttons &= ~(SCE_CTRL_START | SCE_CTRL_TRIANGLE);
+            if (reselect_pressed) {
                 pad.buttons &= ~(SCE_CTRL_START | SCE_CTRL_CIRCLE);
             }
             if (exit_pressed) {
@@ -542,37 +473,18 @@ int main(void) {
                 }
             }
 
-            if (mode == CONNECTION_USB && usb_started) {
-                int usb_status = sceUsbSerialStatus();
-                connected = usb_status == 1;
-                if (connected) {
-                    network_result = 0;
-                } else if (usb_status < 0) {
-                    network_result = usb_status;
-                }
-            }
-
             if (connected) {
                 InputPacket packet;
                 make_packet(&packet, &pad, sequence++);
-                int result;
-                if (mode == CONNECTION_WIFI) {
-                    result = sceNetSendto(
-                        sock, &packet, sizeof(packet), 0,
-                        (SceNetSockaddr *)&host, sizeof(host)
-                    );
-                } else {
-                    result = (int)sceUsbSerialSend(
-                        &packet, sizeof(packet), 0, -1
-                    );
-                }
+                int result = sceNetSendto(
+                    sock, &packet, sizeof(packet), 0,
+                    (SceNetSockaddr *)&host, sizeof(host)
+                );
                 if (result == (int)sizeof(packet)) {
                     sent++;
                 } else if (result < 0) {
                     connected = false;
-                    if (mode == CONNECTION_USB) {
-                        network_result = result;
-                    }
+                    network_result = result;
                 }
             }
             previous_buttons = pad.buttons;
@@ -580,7 +492,7 @@ int main(void) {
 
         if (++draw_divider >= 4) {
             draw_ui(
-                font, mode, connected, host_ip, sent, network_result,
+                font, connected, host_ip, sent, network_result,
                 hosts, host_count, selected_host
             );
             draw_divider = 0;
@@ -589,7 +501,6 @@ int main(void) {
     }
 
     if (sock >= 0) sceNetSocketClose(sock);
-    if (usb_started) sceUsbSerialClose();
     if (network_initialized) {
         sceNetCtlTerm();
         sceNetTerm();

@@ -1,13 +1,12 @@
 # Vita Gamepad
 
 把安装了 HENkaku 自制软件环境的 PlayStation Vita 变成 Windows 或 macOS
-游戏手柄。Vita 可以通过同一局域网的 Wi‑Fi 或 USB 数据线发送输入。
+游戏手柄。Vita 通过同一局域网的 Wi‑Fi 发送输入。
 
 ## 功能
 
 - Wi‑Fi 双向发现，兼容 Windows 多网卡、VMware 和 VPN
 - Vita 显示局域网内可连接电脑的数量与 IP，由用户选择目标
-- Wi‑Fi 与 USB 数据线模式可随时切换
 - 约 120 Hz 的低延迟输入传输
 - 双摇杆、方向键、动作键、L1/R1、Start/Select
 - 后触摸板左右半区模拟 L2/R2
@@ -41,7 +40,7 @@ py -3 -m venv .venv
 Set-ExecutionPolicy -Scope Process Bypass
 .\.venv\Scripts\Activate.ps1
 python -m pip install --upgrade pip
-python -m pip install -e ".[windows,usb]"
+python -m pip install -e ".[windows]"
 ```
 
 以后再次使用时，只需进入项目目录并激活现有虚拟环境：
@@ -101,26 +100,6 @@ vita/build/vita-gamepad.vpk
 
 连接后按 `Start + ○` 可以断开当前电脑并返回主机选择列表。
 
-### 6. 使用 USB 数据线连接
-
-USB 模式目前主要面向 Windows，使用 VitaSDK 的 USB Serial Type D 数据通道。
-请安装 `01.04` 或更高版本的 VPK；旧版 `01.03` 的 USB 初始化参数可能造成
-切换到 USB 时界面卡住。
-
-1. 电脑控制面板保持“开启使用”。
-2. 在 Vita 中按 `Start + △`，切换到 `USB cable`。
-3. 使用支持数据传输的 USB 线连接 Vita 和电脑。
-4. Windows 设备管理器应出现 `PS Vita Type D`。
-5. 首次使用时，通过 [Zadig](https://zadig.akeo.ie/) 只为
-   `PS Vita Type D` 安装 `WinUSB`。
-6. 检测成功后，Vita 显示 `Connected: USB`。
-
-电脑端会同时监听 Wi‑Fi 和 USB，不需要在网页中另外切换连接方式；连接方式只需
-在 Vita 端用 `Start + △` 选择。
-
-再次按 `Start + △` 可以切回 Wi‑Fi。安装 WinUSB 时不要替换普通内容管理或
-VitaShell 使用的 Type B 设备驱动。
-
 ## Vita 端操作
 
 | 操作 | 按键 |
@@ -128,7 +107,6 @@ VitaShell 使用的 Type B 设备驱动。
 | 选择电脑 | 方向键上/下 |
 | 连接选中的电脑 | `×` |
 | 返回电脑选择列表 | `Start + ○` |
-| 切换 Wi‑Fi / USB | `Start + △` |
 | 退出程序 | 按住 `Start + Select` 两秒 |
 
 ## 游戏按键映射
@@ -181,9 +159,6 @@ vitapad --backend debug
 - 控制页面启动失败：`WinError 10013` 或 `10048` 通常表示网页端口已被占用，
   使用 `vitapad-gui --ui-port 8876`。
 - 输入端口启动失败：关闭占用 UDP `5000` 的程序或其他 Vita Gamepad 实例。
-- USB 找不到设备：先确认 Vita 屏幕已经显示 `Connection: USB cable`，并查看
-  是否出现 `USB error: 0x...`；然后确认使用数据线而非仅充电线。只有设备管理器
-  已经出现 `PS Vita Type D` 后，才为这个 Type D 设备安装 WinUSB。
 - PowerShell 禁止激活脚本：执行
   `Set-ExecutionPolicy -Scope Process Bypass`，它只影响当前窗口。
 
@@ -199,7 +174,7 @@ powershell -ExecutionPolicy Bypass -File scripts\build_windows.ps1
 dist\windows\VitaGamepadDashboard.exe
 ```
 
-目标电脑仍需安装 ViGEmBus。USB 模式首次使用仍需配置 Type D 的 WinUSB。
+目标电脑仍需安装 ViGEmBus。
 
 ## 自定义按键和连击
 

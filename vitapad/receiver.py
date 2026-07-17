@@ -114,17 +114,13 @@ class Receiver:
             target=self._run_discovery, name="discovery", daemon=True
         )
         discovery.start()
-        usb = threading.Thread(
-            target=self._receive_usb, name="usb-receiver", daemon=True
-        )
-        usb.start()
         with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as listener:
             listener.bind((self.bind, self.port))
             listener.settimeout(0.05)
             self.log(
                 f"正在监听 Wi-Fi {self.bind}:{self.port}，后端: {self.backend.name}\n"
                 f"发现目标: {', '.join(self._discovery_targets())}\n"
-                "等待 PSVita（Wi-Fi 或 USB）..."
+                "等待 PSVita Wi-Fi 连接..."
             )
             try:
                 while not self._stop.is_set():
@@ -133,7 +129,6 @@ class Receiver:
             finally:
                 self._stop.set()
                 discovery.join(timeout=1.2)
-                usb.join(timeout=1.2)
                 if self.on_input is not None:
                     self.on_input(InputState.neutral())
                 self.backend.close()
@@ -168,22 +163,6 @@ class Receiver:
             self.backend.update(output_state)
             if self.on_input is not None:
                 self.on_input(output_state)
-
-    def _receive_usb(self) -> None:
-        try:
-            from vitapad.usb_transport import iter_usb_packets
-        except ImportError:
-            self.log(
-                'USB 支持未安装；如需数据线模式，请运行 pip install -e ".[usb]"'
-            )
-            return
-        try:
-            self.log("USB 监听已就绪；等待 PS Vita Type D 设备...")
-            for packet in iter_usb_packets(self._stop, self.log):
-                self._handle_packet(packet, "USB")
-        except Exception as exc:
-            if not self._stop.is_set():
-                self.log(f"USB 接收已停止: {exc}")
 
     def _apply_failsafe(self) -> None:
         with self._input_lock:

@@ -16,7 +16,7 @@ if (-not (Test-Path $Python)) {
 }
 
 & $Python -m pip install --upgrade pip setuptools wheel
-& $Python -m pip install -e ".[windows,usb]" pyinstaller
+& $Python -m pip install -e ".[windows]" pyinstaller
 
 & $PyInstaller `
     --noconfirm `
@@ -25,9 +25,7 @@ if (-not (Test-Path $Python)) {
     --name VitaGamepadDashboard `
     --hidden-import vitapad.backends.windows `
     --hidden-import vitapad.backends.debug `
-    --hidden-import usb.backend.libusb1 `
     --collect-all vgamepad `
-    --collect-all libusb_package `
     --paths $ProjectRoot `
     --distpath $DistPath `
     --workpath $WorkPath `

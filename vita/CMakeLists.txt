@@ -14,7 +14,7 @@ include("${VITASDK}/share/vita.cmake" REQUIRED)
 
 set(VITA_APP_NAME "Vita Gamepad")
 set(VITA_TITLEID "VITAPAD01")
-set(VITA_VERSION "01.04")
+set(VITA_VERSION "01.05")
 
 add_executable(vita-gamepad src/main.c)
 target_compile_options(vita-gamepad PRIVATE -Wall -Wextra -Werror -O2)
@@ -27,7 +27,6 @@ target_link_libraries(vita-gamepad
   SceTouch_stub
   SceNet_stub
   SceNetCtl_stub
-  SceUsbSerial_stub
   ScePgf_stub
   SceCommonDialog_stub
   SceAppMgr_stub
